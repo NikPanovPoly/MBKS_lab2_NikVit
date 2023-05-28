@@ -74,3 +74,25 @@ typedef struct process {
 	wchar_t processDllsName[MAX_COUNT][MAX_NAME_LENGTH];
 }process;
 
+
+
+class processenjoyer : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    processenjoyer(QWidget *parent = nullptr);
+    ~processenjoyer();
+
+private:
+    HANDLE pipePtr;
+    void setMandatoryLevel(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten);
+    void setProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten);
+
+    void getMandatoryLevel(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten);
+    void getProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten);
+    void updateTable(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten, process proc_data, DWORD dwRead);
+	void reloadTable(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten, process proc_data, DWORD dwRead);
+
+    Ui::processenjoyerClass ui;
+};
