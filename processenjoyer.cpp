@@ -247,6 +247,7 @@ void processenjoyer::updateTable(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD
 
 void processenjoyer::setMandatoryLevel(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten) {
     hPipe = this->pipePtr;
+    int err = 0;
     if (hPipe != INVALID_HANDLE_VALUE) {
         QString int_path = ui.lineEdit->text();
         if (int_path.isEmpty() != 1) {
@@ -275,30 +276,52 @@ void processenjoyer::setMandatoryLevel(Ui::processenjoyerClass ui, HANDLE hPipe,
                 wcscpy(&data[6], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            if (int_lvl.MEDIUM) {
+            else if (int_lvl.MEDIUM) {
                 data[2] = 'M'; data[3] = 'e'; data[4] = 'd'; data[5] = 'i'; data[6] = 'u'; data[7] = 'm';  data[8] = ' ';
                 wcscpy(&data[9], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            if (int_lvl.HIGH) {
+            else if (int_lvl.HIGH) {
                 data[2] = 'H'; data[3] = 'i'; data[4] = 'g'; data[5] = 'h'; data[6] = ' ';
                 wcscpy(&data[7], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            
+            else {
+                err = NOT_SELECTED;
+            }
         }
-       
+        else {
+            err = NO_FILE;
+        }
 
-        
-        
-        QMessageBox::information(this, "Success", "Successfully changed level");
-        
+        if (err != 0) {
+            switch (err) {
+            case NO_FILE:
+                QMessageBox::information(this, "Error", "No such file");
+                break;
+            case NOT_SELECTED:
+                QMessageBox::information(this, "Error", "No Mandatory level selected");
+                break;
+            case NO_SUCH_FILE:
+                QMessageBox::information(this, "Error", "No such file found");
+                break;
+            default:
+                QMessageBox::information(this, "Error", "Unknown error");
+                break;
+            }
+        }
+        else {
+            QMessageBox::information(this, "Success", "Successfully changed level");
+        }
     }
-    
+    else {
+        QMessageBox::information(this, "Error", "Pipe problem");
+    }
 }
 
 void processenjoyer::setProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten) {
     hPipe = this->pipePtr;
+    int err = 0;
     if (hPipe != INVALID_HANDLE_VALUE) {
         WCHAR data[100] = { 0 };
 
@@ -323,22 +346,38 @@ void processenjoyer::setProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPip
                 wcscpy(&data[6], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            if (int_lvl.MEDIUM) {
+            else if (int_lvl.MEDIUM) {
                 data[2] = 'M'; data[3] = 'e'; data[4] = 'd'; data[5] = 'i'; data[6] = 'u'; data[7] = 'm';  data[8] = ' ';
                 wcscpy(&data[9], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            if (int_lvl.HIGH) {
+            else if (int_lvl.HIGH) {
                 data[2] = 'H'; data[3] = 'i'; data[4] = 'g'; data[5] = 'h'; data[6] = ' ';
                 wcscpy(&data[7], wcharStr);
                 WriteFile(hPipe, data, sizeof(data), &dwWritten, NULL);
             }
-            
+            else {
+                err = NOT_SELECTED;
+            }
         }
-       
+        else {
+            err = NO_PID;
+        }
 
-        
-        
+        if (err != 0) {
+            switch (err) {
+            case NO_PID:
+                QMessageBox::information(this, "Error", "No such process");
+                break;
+            case NOT_SELECTED:
+                QMessageBox::information(this, "Error", "No Integrity level selected");
+                break;
+            default:
+                QMessageBox::information(this, "Error", "Unknown error");
+                break;
+            }
+        }
+        else {
             QMessageBox::information(this, "Success", "Successfully changed level");
             for (int row = 0; row < ui.tableWidget->rowCount(); ++row) {
                 QTableWidgetItem* pidItem = ui.tableWidget->item(row, 0);
@@ -359,9 +398,11 @@ void processenjoyer::setProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPip
                     ui.tableWidget->setItem(row, 6, dataInt);
                 }
             }
-        
+        }
     }
-    
+    else {
+        QMessageBox::information(this, "Error", "Pipe problem");
+    }
 }
 
 void processenjoyer::getProcessIntegrity(Ui::processenjoyerClass ui, HANDLE hPipe, DWORD dwWritten) {
