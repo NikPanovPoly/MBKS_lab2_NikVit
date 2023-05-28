@@ -427,9 +427,148 @@ void getIntegrityLevel(HANDLE hProcess)
     }
 }
 
+void changeProcIntegrity(DWORD processID, wchar_t* integrity)
+{
+    DWORD dwProcessId = processID;
+
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, dwProcessId);
+    if (hProcess == NULL)
+    {
+        printf("[Error]: OpenProcess - %d\n", GetLastError());
+        return;
+    }
+
+    HANDLE hToken = NULL;
+    if (!OpenProcessToken(hProcess, TOKEN_ADJUST_DEFAULT | TOKEN_QUERY, &hToken))
+    {
+        printf("[Error]: OpenProcessToken - %d\n", GetLastError());
+        CloseHandle(hProcess);
+        return;
+    }
+
+    DWORD dwSize = 0;
+    if (!GetTokenInformation(hToken, TokenIntegrityLevel, NULL, 0, &dwSize))
+    {
+        DWORD errorCode = GetLastError();
+        if (errorCode != ERROR_INSUFFICIENT_BUFFER || dwSize == 0)
+        {
+            printf("[Error]: GetTokenInformation - %d\n", GetLastError());
+            CloseHandle(hToken);
+            CloseHandle(hProcess);
+            return;
+        }
+    }
+
+    TOKEN_MANDATORY_LABEL* pIntegrityLabel = (TOKEN_MANDATORY_LABEL*)malloc(dwSize);
+    if (!GetTokenInformation(hToken, TokenIntegrityLevel, pIntegrityLabel, dwSize, &dwSize))
+    {
+        printf("[Error]: GetTokenInformation - %d\n", GetLastError());
+        free(pIntegrityLabel);
+        CloseHandle(hToken);
+        CloseHandle(hProcess);
+        return;
+    }
+
+    // Low (SID: S-1-16-4096), 
+    // Medium (SID: S-1-16-8192) 
+    // High (SID: S-1-16-12288) 
+    // System (SID: S-1-16-16384)
+
+    PSID levelSid = { 0 };
+    if (!ConvertStringSidToSid((LPCWSTR)integrity, &levelSid))
+    {
+        printf("[Error]: ConvertStringSidToSid - %d\n", GetLastError());
+        free(pIntegrityLabel);
+        CloseHandle(hToken);
+        CloseHandle(hProcess);
+        return;
+    }
+
+    pIntegrityLabel->Label.Sid = levelSid;
+
+    if (!SetTokenInformation(hToken, TokenIntegrityLevel, pIntegrityLabel, dwSize))
+    {
+        printf("[Error]: SetTokenInformation - %d\n", GetLastError());
+        free(pIntegrityLabel);
+        CloseHandle(hToken);
+        CloseHandle(hProcess);
+        return;
+    }
+
+    free(pIntegrityLabel);
+    CloseHandle(hToken);
+    CloseHandle(hProcess);
+}
+
+WCHAR* getFileIntegrityLevel(WCHAR* file_name)
+{
+    DWORD integrityLevel = SECURITY_MANDATORY_UNTRUSTED_RID;
+    PSECURITY_DESCRIPTOR pSD = NULL;
+    PACL acl = 0;
+
+    GetNamedSecurityInfo(file_name, SE_FILE_OBJECT, LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, &acl, &pSD);
+
+    if (0 != acl && 0 < acl->AceCount)
+    {
+        SYSTEM_MANDATORY_LABEL_ACE* ace = 0;
+        if (GetAce(acl, 0, reinterpret_cast<void**>(&ace)))
+        {
+            SID* sid = reinterpret_cast<SID*>(&ace->SidStart);
+            integrityLevel = sid->SubAuthority[0];
+        }
+    }
+
+    PWSTR stringSD;
+    ULONG stringSDLen = 0;
+
+    ConvertSecurityDescriptorToStringSecurityDescriptorW(pSD, SDDL_REVISION_1, LABEL_SECURITY_INFORMATION, &stringSD, &stringSDLen);
+
+    if (pSD) LocalFree(pSD);
+
+    if (integrityLevel == 0x0000) wcscpy(fileIntegrity, L"Untrusted");
+    else if (integrityLevel == 0x1000)  wcscpy(fileIntegrity, L"Low");
+    else if (integrityLevel == 0x2000)  wcscpy(fileIntegrity, L"Medium");
+    else if (integrityLevel == 0x3000) wcscpy(fileIntegrity, L"High");
+    else if (integrityLevel == 0x4000) wcscpy(fileIntegrity, L"System");
+    else wcscpy(fileIntegrity, L"Error");
+
+    return fileIntegrity;
+}
+
+void changeFileIntegrityLevel(WCHAR* file_name, WCHAR* integrity)
+{
+    PSECURITY_DESCRIPTOR pSD = NULL;
+
+    PACL pSacl = NULL;
+    BOOL fSaclPresent = FALSE;
+    BOOL fSaclDefaulted = FALSE;
+
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW((LPCWSTR)integrity, SDDL_REVISION_1, &pSD, NULL))
+    {
+        if (GetSecurityDescriptorSacl(pSD, &fSaclPresent, &pSacl, &fSaclDefaulted))
+        {
+            if (SetNamedSecurityInfoW(file_name, SE_FILE_OBJECT, LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, pSacl))
+            {
+                fprintf(stdout, "[Error]: SetNamedSecurityInfoW - %d\n", GetLastError());
+            }
+        }
+        else
+        {
+            fprintf(stdout, "[Error]: GetSecurityDescriptorSacl - %d\n", GetLastError());
+        }
+    }
+    else
+    {
+        fprintf(stdout, "[Error]: ConvertStringSecurityDescriptorToSecurityDescriptorW - %d\n", GetLastError());
+    }
+    LocalFree(pSD);
+}
+
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
+
+    getFileIntegrityLevel((WCHAR*)L"C:\\Qt");
 
     //DWORD sePrivilege = SE_PRIVILEGE_ENABLED;
     //turnDebugPrivilege(sePrivilege);

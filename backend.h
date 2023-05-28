@@ -29,6 +29,11 @@ void getProcPathToExe(HANDLE hProcess);
 void getProcType(HANDLE hProcess);
 void getProcDescryption(const wchar_t* fileName);
 void getIntegrityLevel(HANDLE hProcess);
+void changeProcIntegrity(DWORD processID, wchar_t* integrity);
+
+//информация о файле
+WCHAR* getFileIntegrityLevel(WCHAR* file_name);
+void changeFileIntegrityLevel(WCHAR* file_name, WCHAR* integrity);
 
 //сбор фулл информации
 void processInfo(DWORD processID);
