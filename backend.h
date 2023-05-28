@@ -20,6 +20,7 @@
 #define MAX_TYPE_LENGTH		7
 
 //основные поля для функций
+
 void getOwnerAndSid(HANDLE hProcess);
 void getDepAndAslr(HANDLE hProcess);
 void getParentPidAndName(DWORD processID);
@@ -38,6 +39,10 @@ void changeFileIntegrityLevel(WCHAR* file_name, WCHAR* integrity);
 //сбор фулл информации
 void processInfo(DWORD processID);
 void processesDatabase();
+
+//пайп соединения для отправки данных графике
+void sendDatabase(HANDLE hPipe);
+void establishPipe();
 
 //вспомогательная дебаг привилегия
 BOOL turnDebugPrivilege();
@@ -64,3 +69,13 @@ typedef struct process
 
 	wchar_t processDllsName[MAX_COUNT][MAX_NAME_LENGTH];
 }process;
+
+enum Command
+{
+	DATABASE,
+	CHANGE_INTEGRITY,
+	MANDATORY,
+	CHANGE_MANDATORY,
+	DISCONNECT,
+	INTEGRITY
+};

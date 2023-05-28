@@ -294,7 +294,7 @@ void processInfo(DWORD processID)
 
     getDepAndAslr(hProcess);
 
-    fprintf(stdout, "procDescryption: %ws\n", Processes[valid_proc_counter].procDescryption);
+    /*fprintf(stdout, "procDescryption: %ws\n", Processes[valid_proc_counter].procDescryption);
     fprintf(stdout, "processName: %ws\n", Processes[valid_proc_counter].processName);
     fprintf(stdout, "PID: %lu\n", Processes[valid_proc_counter].PID);
     fprintf(stdout, "pathProcessExe: %ws\n", Processes[valid_proc_counter].pathProcessExe);
@@ -306,7 +306,7 @@ void processInfo(DWORD processID)
     fprintf(stdout, "parentName: %ws\n", Processes[valid_proc_counter].parentName);
     fprintf(stdout, "parentPID: %lu\n", Processes[valid_proc_counter].parentPID);
     fprintf(stdout, "integrityLevel: %ws\n", Processes[valid_proc_counter].integrityLevel);
-    fprintf(stdout, "____________________________________________________________________\n");
+    fprintf(stdout, "____________________________________________________________________\n");*/
 
     CloseHandle(hProcess);
     ++valid_proc_counter;
@@ -354,7 +354,7 @@ BOOL turnDebugPrivilege()
     TOKEN_PRIVILEGES tp;
     tp.PrivilegeCount = 1;
     tp.Privileges[0].Luid = luidDebug;
-    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED; //для отключения прописать 0
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED; // disable - 0
 
     if (!AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(TOKEN_PRIVILEGES), NULL, NULL))
     {
@@ -564,9 +564,137 @@ void changeFileIntegrityLevel(WCHAR* file_name, WCHAR* integrity)
     LocalFree(pSD);
 }
 
+void sendDatabase(HANDLE hPipe)
+{
+    DWORD dwRead;
+    DWORD dwWritten;
+    process Temp = { 0 };
+
+    for (size_t i = 0; i < valid_proc_counter + 1; ++i)
+    {
+        while (1)
+        {
+            WriteFile(hPipe, &Processes[i], sizeof(Processes[i]), &dwWritten, NULL);
+
+            if (ReadFile(hPipe, &Temp, sizeof(Temp), &dwRead, NULL) != FALSE)
+            {
+                if (wcscmp(Processes[i].processName, Temp.processName) == 0)
+                {
+                    break;
+                }
+            }
+        }
+    }
+    WriteFile(hPipe, "DONE", 5, &dwWritten, NULL);
+
+}
+
+void establishPipe()
+{
+    HANDLE hPipe = CreateNamedPipe(TEXT("\\\\.\\pipe\\Pipe"),
+        PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_TYPE_MESSAGE | PIPE_WAIT, //BYTE
+        1,
+        1024 * 16,
+        1024 * 16,
+        NMPWAIT_USE_DEFAULT_WAIT,
+        NULL);
+
+    if (hPipe == INVALID_HANDLE_VALUE)
+    {
+        fprintf(stdout, "[Error]: CreateNamedPipe - %d\n", GetLastError());
+        return;
+    }
+
+    //////////////////////// GET DATABASE OF PROCESS //////////////////////////////
+
+    turnDebugPrivilege();
+    processesDatabase();
+
+    //////////////////////// SEND DATABASE TO GUI //////////////////////////////
+
+    DWORD dwRead = 0;
+    DWORD dwWritten = 0;
+    WCHAR buffer[128] = { 0 };
+
+    //ожидание подключения графики
+    while (1)
+    {
+        if (ConnectNamedPipe(hPipe, NULL) != FALSE)   
+        {
+            sendDatabase(hPipe);
+        }
+        while (1)
+        {
+            BOOL read = ReadFile(hPipe, buffer, sizeof(buffer), &dwRead, NULL);
+            if (read != FALSE)
+            {
+                printf("Entered");
+                int command = buffer[0] - 48; // 1 Low 4242
+                WCHAR* context = { 0 };
+                WCHAR* pointer = &buffer[2];
+                WCHAR* integrity;
+                WCHAR* procId;
+                DWORD processID;
+                WCHAR* fileName;
+                WCHAR integrity_cmd[30] = {0};
+
+                switch (command)
+                {
+                case DATABASE:
+                    valid_proc_counter = 0;
+                    processesDatabase();
+                    sendDatabase(hPipe);
+                    break;
+
+                case CHANGE_INTEGRITY:
+                    integrity = wcstok_s(pointer, L" \0", &context);
+                    procId = wcstok_s(NULL, L" \0", &context);
+                    processID = _wtoi(procId);
+
+                    if (!wcscmp(integrity, L"Low")) wcscpy(integrity, L"S-1-16-4096");
+                    else if (!wcscmp(integrity, L"Medium")) wcscpy(integrity, L"S-1-16-8192");
+                    else wcscpy(integrity, L"S-1-16-12288");
+
+                    changeProcIntegrity(processID, integrity);
+                    break;
+
+                case MANDATORY:
+                    fileName = wcstok_s(pointer, L"\0", &context);
+                    WCHAR fileInt[32];
+                    WriteFile(hPipe, getFileIntegrityLevel(fileName), sizeof(fileInt), &dwWritten, NULL);
+
+                    break;
+
+                case CHANGE_MANDATORY:
+                    integrity = wcstok_s(pointer, L" \0", &context);
+                    fileName = wcstok_s(NULL, L" \0", &context);
+                    if (!wcscmp(integrity, L"Low")) wcscpy(integrity_cmd, L"S:(ML;;NR;;;LW)");
+                    else if (!wcscmp(integrity, L"Medium")) wcscpy(integrity_cmd, L"S:(ML;;NR;;;ME)");
+                    else wcscpy(integrity_cmd, L"S:(ML;;NR;;;HI)");
+
+                    changeFileIntegrityLevel(fileName, integrity_cmd);
+                    break;
+
+                case DISCONNECT:
+                    DisconnectNamedPipe(hPipe);
+                    CloseHandle(hPipe);
+                    break;
+
+
+                default:
+                    break;
+                }
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
+
+    establishPipe();
 
     getFileIntegrityLevel((WCHAR*)L"C:\\Qt");
 
